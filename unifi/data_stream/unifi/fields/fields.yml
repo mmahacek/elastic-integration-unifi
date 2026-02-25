@@ -1,0 +1,88 @@
+- name: unifi
+  type: group
+  fields:
+    - name: event
+      type: group
+      fields:
+        - name: id
+          type: long
+        - name: name
+          type: keyword
+    - name: client
+      type: group
+      fields:
+        - name: hostname
+          type: keyword
+        - name: alias
+          type: keyword
+        - name: mac
+          type: keyword
+        - name: ip
+          type: ip
+    - name: connected
+      type: group
+      fields:
+        - name: name
+          type: keyword
+        - name: model
+          type: keyword
+        - name: mac
+          type: keyword
+        - name: version
+          type: keyword
+        - name: ip
+          type: ip
+        - name: wifi
+          type: group
+          fields:
+            - name: name
+              type: keyword
+            - name: band
+              type: keyword
+            - name: channel
+              type: long
+            - name: channel_width
+              type: long
+            - name: rssi
+              type: long
+    - name: last_connected
+      type: group
+      fields:
+        - name: name
+          type: keyword
+        - name: model
+          type: keyword
+        - name: mac
+          type: keyword
+        - name: version
+          type: keyword
+        - name: ip
+          type: ip
+        - name: wifi
+          type: group
+          fields:
+            - name: name
+              type: keyword
+            - name: band
+              type: keyword
+            - name: channel
+              type: long
+            - name: channel_width
+              type: long
+            - name: rssi
+              type: long
+    - name: session
+      type: group
+      fields:
+        - name: duration
+          type: keyword
+        - name: subnet
+          type: ip_range
+        - name: usage_up
+          type: keyword
+        - name: usage_down
+          type: keyword
+        - name: wifi_interference
+          type: long
+        - name: wifi_utilization
+          type: long

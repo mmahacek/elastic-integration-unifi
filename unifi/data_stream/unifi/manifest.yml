@@ -1,0 +1,75 @@
+title: "Activity Logging"
+type: logs
+streams:
+  - input: udp
+    title: "Activity Logging (Syslog)"
+    description: |-
+      Collect logs with UDP
+    template_path: udp.yml.hbs
+    vars:
+      - name: listen_address
+        type: text
+        title: "Listen Address"
+        description: |-
+          Bind address for the listener. Use 0.0.0.0 to listen on all interfaces.
+        required: true
+        show_user: true
+        default: localhost
+      - name: listen_port
+        type: text
+        title: "Listen Port"
+        description: |-
+          Bind port for the listener.
+        required: true
+        show_user: true
+        default: 9041
+      - name: processors
+        type: yaml
+        title: "Processors"
+        description: |-
+          Processors are used to reduce the number of fields in the exported event or to enhance the event with metadata. This executes in the agent before the logs are parsed. See [Processors](https://www.elastic.co/guide/en/beats/filebeat/current/filtering-and-enhancing-data.html) for details.
+      - name: tags
+        type: text
+        title: "Tags"
+        description: |-
+          Tags to include in the published event
+        multi: true
+        show_user: true
+      - name: syslog
+        type: bool
+        title: "Syslog Parsing"
+        description: |-
+          Enable the syslog parser to automatically parse RFC3164 and RFC5424 syslog formatted data. The syslog parser can be configured under Advanced Options.
+        show_user: false
+      # - name: syslog_options
+      #   type: yaml
+      #   title: "Syslog Options"
+      #   description: |-
+      #     i.e. format, time zone, etc.
+      #   default: ""
+      #   field: message
+      #   #format: auto
+      #   #timezone: Local
+      - name: tz_offset
+        type: text
+        title: Time Zone Offset
+        multi: false
+        required: true
+        show_user: false
+        default: Local
+        description: >-
+          By default, datetimes in the logs without a time zone will be interpreted as relative to the time zone configured in the host where the agent is running. If ingesting logs from a different time zone, use this field to set the time zone offset so that datetimes are correctly parsed. Acceptable time zone formats are: local time (Local), a canonical ID (e.g. "Europe/Amsterdam"), abbreviated (e.g. "EST") or an HH:mm differential (e.g. "-05:00") from UTC.
+      - name: preserve_original_event
+        type: bool
+        title: "Preserve original event"
+        description: |-
+          Preserves a raw copy of the original event, added to the field `event.original`.
+        required: true
+        show_user: true
+        default: false
+      - name: custom
+        type: yaml
+        title: "Custom configurations"
+        description: |-
+          Here YAML configuration options can be used to be added to your configuration. Be careful using this as it might break your configuration file.
+        default: ""

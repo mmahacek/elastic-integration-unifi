@@ -1,0 +1,464 @@
+---
+description: Pipeline for Unifi activity logs.
+processors:
+    #
+    # Timestamp parsing.
+    #
+    - set:
+          tag: set_event_timezone
+          field: event.timezone
+          copy_from: _conf.tz_offset
+          if: ctx._conf?.tz_offset instanceof String && !ctx._conf.tz_offset.equalsIgnoreCase('local')
+    - grok:
+          description: Extract timestamp from log header when deviceReceiptTime not given.
+          if: ctx?.cef?.extensions?.deviceReceiptTime == null
+          field: event.original
+          ignore_failure: true
+          pattern_definitions:
+              ECS_SYSLOG_PRI: "<%{NONNEGINT:log.syslog.priority:long}>"
+              SYSLOG_TIMESTAMP: (?:%{SYSLOGTIMESTAMP:_tmp.timestamp}|%{TIMESTAMP_ISO8601:_tmp.timestamp8601})
+          patterns:
+              - "^%{SYSLOG_TIMESTAMP} "
+              - "^%{ECS_SYSLOG_PRI}%{SYSLOG_TIMESTAMP} " # RFC3164
+              - "^%{ECS_SYSLOG_PRI}%{NONNEGINT} %{SYSLOG_TIMESTAMP} " # RFC5224
+          tag: timestamp extract grok
+
+    - grok:
+        description: split data to prep for non_CEF KV data
+        tag: non_cef_grok_to_split_rules
+        field: message
+        ignore_failure: true
+        ignore_missing: true
+        patterns:
+            - \[%{GREEDYDATA:_tmp.text}\] DESCR="%{DATA:unifi.rule}" %{GREEDYDATA:_tmp.message}
+    - kv:
+        tag: kv_split_rule_fields
+        field: _tmp.message
+        field_split: " "
+        value_split: "="
+        ignore_failure: true
+
+    - date:
+          tag: date__tmp_timestamp8601
+          if: ctx?._tmp?.timestamp8601 != null
+          field: _tmp.timestamp8601
+          formats:
+              - ISO8601
+    - date:
+          tag: date__tmp_timestamp
+          if: ctx?._tmp?.timestamp != null
+          field: _tmp.timestamp
+          formats:
+              - MMM  d HH:mm:ss
+              - MMM dd HH:mm:ss
+          timezone: "{{{event.timezone}}}"
+    - remove:
+          tag: remove_event_original
+          if: ctx?.tags == null || !(ctx.tags.contains('preserve_original_event'))
+          field: event.original
+          ignore_failure: true
+          ignore_missing: true
+    - append:
+          tag: append_preserve_original_event_on_error
+          field: tags
+          value: preserve_original_event
+          allow_duplicates: false
+          if: ctx.error?.message != null
+    - rename:
+          tag: rename_unfi_event_id
+          field: cef.device.event_class_id
+          target_field: unifi.event.id
+          if: ctx.cef?.device?.event_class_id != null
+    - rename:
+          tag: rename_unfi_event_name
+          field: cef.name
+          target_field: unifi.event.name
+          if: ctx.cef?.name != null
+    - rename:
+          tag: rename_unfi_hostname
+          field: log.syslog.hostname
+          target_field: observer.hostname
+          if: ctx.log?.syslog?.hostname != null && ctx.observer?.hostname == null
+    - rename:
+          tag: rename_destination_address
+          field: DST
+          target_field: destination.address
+          if: ctx.DST != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_destination_port
+          field: DPT
+          target_field: destination.port
+          if: ctx.DPT != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_source_address
+          field: SRC
+          target_field: source.address
+          if: ctx.SRC != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_source_port
+          field: SPT
+          target_field: source.port
+          if: ctx.SPT != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_ingress_interface_name
+          field: IN
+          target_field: observer.ingress.interface.name
+          if: ctx.IN != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_cef_extensions_destinationAddress_to_destination_address_2a6c9211
+          field: cef.extensions.destinationAddress
+          target_field: destination.address
+          if: ctx.cef?.extensions?.destinationAddress != null && ctx.destination?.address == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_cef_extensions_destinationPort_to_destination_port_403b90c0
+          field: cef.extensions.destinationPort
+          target_field: destination.port
+          if: ctx.cef?.extensions?.destinationPort != null && ctx.destination?.port == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_cef_extensions_sourcePort_to_source_port_08cb9db3
+          field: cef.extensions.sourcePort
+          target_field: source.port
+          if: ctx.cef?.extensions?.sourcePort != null && ctx.source?.port == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_observer.ip
+          field: cef.extensions.UNIFIdeviceIp
+          target_field: observer.ip
+          if: ctx.cef?.extensions?.UNIFIdeviceIp != null && ctx.observer?.deviceReceiptTime == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_observer_ingress_alias
+          field: cef.extensions.deviceInboundInterface
+          target_field: observer.ingress.interface.alias
+          if: ctx.cef?.extensions?.deviceInboundInterface != null && ctx.observer?.ingress?.interface?.alias == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_observer_egress_alias
+          field: cef.extensions.deviceOutboundInterface
+          target_field: observer.egress.interface.alias
+          if: ctx.cef?.extensions?.deviceOutboundInterface != null && ctx.observer?.egress?.interface?.alias == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_cef_extensions_UNIFIclientMac_to_client_mac
+          field: cef.extensions.UNIFIclientMac
+          target_field: unifi.client.mac
+          if: ctx.cef?.extensions?.UNIFIclientMac != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_cef_extensions_UNIFIclientIP_to_client_address
+          field: cef.extensions.UNIFIclientIP
+          target_field: unifi.client.ip
+          if: ctx.cef?.extensions?.UNIFIclientIP != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_cef_extensions_UNIFIclientIp_to_client_address
+          field: cef.extensions.UNIFIclientIp
+          target_field: unifi.client.ip
+          if: ctx.cef?.extensions?.UNIFIclientIp != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_UNIFInetworkVlan_to_network_vlan_id
+          field: cef.extensions.UNIFInetworkVlan
+          target_field: network.vlan.id
+          if: ctx.cef?.extensions?.UNIFInetworkVlan != null && ctx.network?.vlan?.id == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_network_name
+          field: cef.extensions.UNIFInetworkName
+          target_field: network.name
+          if: ctx.cef?.extensions?.UNIFInetworkName != null && ctx.network?.name == null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_client_name
+          field: cef.extensions.UNIFIclientHostname
+          target_field: unifi.client.hostname
+          if: ctx.cef?.extensions?.UNIFIclientHostname != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_client_alias
+          field: cef.extensions.UNIFIclientAlias
+          target_field: client.alias
+          if: ctx.cef?.extensions?.UNIFIclientAlias != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_ip
+          field: cef.extensions.UNIFIconnectedToDeviceIp
+          target_field: unifi.connected.ip
+          if: ctx.cef?.extensions?.UNIFIconnectedToDeviceIp != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_mac
+          field: cef.extensions.UNIFIconnectedToDeviceMac
+          target_field: unifi.connected.mac
+          if: ctx.cef?.extensions?.UNIFIconnectedToDeviceMac != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_model
+          field: cef.extensions.UNIFIconnectedToDeviceModel
+          target_field: unifi.connected.model
+          if: ctx.cef?.extensions?.UNIFIconnectedToDeviceModel != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_name
+          field: cef.extensions.UNIFIconnectedToDeviceName
+          target_field: unifi.connected.name
+          if: ctx.cef?.extensions?.UNIFIconnectedToDeviceName != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_version
+          field: cef.extensions.UNIFIconnectedToDeviceVersion
+          target_field: unifi.connected.version
+          if: ctx.cef?.extensions?.UNIFIconnectedToDeviceVersion != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_ip
+          field: cef.extensions.UNIFIlastConnectedToDeviceIp
+          target_field: unifi.last_connected.ip
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToDeviceIp != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_mac
+          field: cef.extensions.UNIFIlastConnectedToDeviceMac
+          target_field: unifi.last_connected.mac
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToDeviceMac != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_model
+          field: cef.extensions.UNIFIlastConnectedToDeviceModel
+          target_field: unifi.last_connected.model
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToDeviceModel != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_name
+          field: cef.extensions.UNIFIlastConnectedToDeviceName
+          target_field: unifi.last_connected.name
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToDeviceName != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_version
+          field: cef.extensions.UNIFIlastConnectedToDeviceVersion
+          target_field: unifi.last_connected.version
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToDeviceVersion != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_wifi_band
+          field: cef.extensions.UNIFIlastConnectedToWiFiBand
+          target_field: unifi.last_connected.wifi.band
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToWiFiBand != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_wifi_channel
+          field: cef.extensions.UNIFIlastConnectedToWiFiChannel
+          target_field: unifi.last_connected.wifi.channel
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToWiFiChannel != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_wifi_width
+          field: cef.extensions.UNIFIlastConnectedToWiFiChannelWidth
+          target_field: unifi.last_connected.wifi.channel_width
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToWiFiChannelWidth != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_last_connected_wifi_rssi
+          field: cef.extensions.UNIFIlastConnectedToWiFiRssi
+          target_field: unifi.last_connected.wifi.rssi
+          if: ctx.cef?.extensions?.UNIFIlastConnectedToWiFiRssi != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_wifi_name
+          field: cef.extensions.UNIFIwifiName
+          target_field: unifi.connected.wifi.name
+          if: ctx.cef?.extensions?.UNIFIwifiName != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_wifi_band
+          field: cef.extensions.UNIFIwifiBand
+          target_field: unifi.connected.wifi.band
+          if: ctx.cef?.extensions?.UNIFIwifiBand != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_wifi_channel
+          field: cef.extensions.UNIFIwifiChannel
+          target_field: unifi.connected.wifi.channel
+          if: ctx.cef?.extensions?.UNIFIwifiChannel != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_wifi_width
+          field: cef.extensions.UNIFIwifiChannelWidth
+          target_field: unifi.connected.wifi.channel_width
+          if: ctx.cef?.extensions?.UNIFIwifiChannelWidth != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_connected_wifi_rssi
+          field: cef.extensions.UNIFIWiFiRssi
+          target_field: unifi.connected.wifi.rssi
+          if: ctx.cef?.extensions?.UNIFIWiFiRssi != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_session_UNIFIduration
+          field: UNIFIduration
+          target_field: unifi.session.duration
+          if: ctx.cef?.extensions?.UNIFIduration != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_session_UNIFInetworkSubnet
+          field: cef.extensions.UNIFInetworkSubnet
+          target_field: unifi.session.subnet
+          if: ctx.cef?.extensions?.UNIFInetworkSubnet != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_session_UNIFIusageUp
+          field: cef.extensions.UNIFIusageUp
+          target_field: unifi.session.usage_up
+          if: ctx.cef?.extensions?.UNIFIusageUp != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_session_UNIFIusageDown
+          field: cef.extensions.UNIFIusageDown
+          target_field: unifi.session.usage_down
+          if: ctx.cef?.extensions?.UNIFIusageDown != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_session_UNIFIwifiInterference
+          field: cef.extensions.UNIFIwifiInterference
+          target_field: unifi.session.wifi_interference
+          if: ctx.cef?.extensions?.UNIFIwifiInterference != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_session_UNIFIwifiAirtimeUtilization
+          field: cef.extensions.UNIFIwifiAirtimeUtilization
+          target_field: unifi.session.wifi_utilization
+          if: ctx.cef?.extensions?.UNIFIwifiAirtimeUtilization != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - remove:
+          tag: remove
+          field:
+              - _tmp
+              - _conf
+              - cef.device.vendor
+              - cef.device.version
+              - cef.device.product
+              - cef.extensions.UNIFIhost
+          ignore_missing: true
+on_failure:
+    - remove:
+          field:
+              - _tmp
+              - _conf
+          ignore_missing: true
+    - append:
+          field: error.message
+          value: >-
+              Processor '{{{ _ingest.on_failure_processor_type }}}'
+              {{#_ingest.on_failure_processor_tag}}with tag '{{{ _ingest.on_failure_processor_tag }}}'
+              {{/_ingest.on_failure_processor_tag}}in pipeline '{{{ _ingest.pipeline }}}'
+              failed with message '{{{ _ingest.on_failure_message }}}'
+    - set:
+          field: event.kind
+          value: pipeline_error
+    - append:
+          field: tags
+          value: preserve_original_event
+          allow_duplicates: false
+
+    # - rename:
+    #       tag: rename_
+    #       field: 
+    #       target_field: 
+    #       if: ctx.cef?.extensions?. != null
+    #       ignore_missing: true
+    #       ignore_failure: true
+    #       override: false

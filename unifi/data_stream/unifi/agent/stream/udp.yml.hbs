@@ -1,0 +1,60 @@
+host: {{listen_address}}:{{listen_port}}
+{{#if max_message_size}}
+max_message_size: {{max_message_size}}
+{{/if}}
+{{#if timeout}}
+timeout: {{timeout}}
+{{/if}}
+{{#if keep_null}}
+keep_null: {{keep_null}}
+{{/if}}
+{{#if tags.length}}
+tags:
+{{#each tags as |tag|}}
+- {{tag}}
+{{/each}}
+{{#if preserve_original_event}}
+- preserve_original_event
+{{/if}}
+{{else}}
+{{#if preserve_original_event}}
+tags:
+- preserve_original_event
+{{/if}}
+{{/if}}
+
+{{#contains "forwarded" tags}}
+publisher_pipeline.disable_host: true
+{{/contains}}
+
+processors:
+- add_locale: ~
+- copy_fields:
+    fields:
+    - from: '@timestamp'
+      to: event.created
+{{#if preserve_original_event}}
+    - from: message
+      to: event.original
+{{/if}}
+- syslog:
+    field: message
+    format: auto
+    timezone: "{{tz_offset}}"
+- drop_event:
+    when:
+        and:
+            - not:
+                has_fields: ['log.syslog.priority']
+            - has_fields: ['error.message']
+{{#if tz_offset}}
+- add_fields:
+    target: _conf
+    fields:
+        tz_offset: "{{tz_offset}}"
+{{/if}}
+- decode_cef:
+    field: message
+{{#if processors}}
+{{processors}}
+{{/if}}
