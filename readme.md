@@ -4,7 +4,7 @@ NOTE: This integration is in the early alpha phase.
 
 This integration for Elastic Agents facilitates receiving log data from Unifi devices.
 
-
+Changelogs will not be maintained until this integration reaches version 0.1.0.
 
 ## Installing
 
