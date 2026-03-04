@@ -24,19 +24,19 @@ processors:
           tag: timestamp extract grok
 
     - grok:
-        description: split data to prep for non_CEF KV data
-        tag: non_cef_grok_to_split_rules
-        field: message
-        ignore_failure: true
-        ignore_missing: true
-        patterns:
-            - \[%{GREEDYDATA:_tmp.text}\] DESCR="%{DATA:unifi.rule}" %{GREEDYDATA:_tmp.message}
+          description: split data to prep for non_CEF KV data
+          tag: non_cef_grok_to_split_rules
+          field: message
+          ignore_failure: true
+          ignore_missing: true
+          patterns:
+              - \[%{GREEDYDATA:_tmp.text}\] DESCR="%{DATA:unifi.rule}" %{GREEDYDATA:_tmp.message}
     - kv:
-        tag: kv_split_rule_fields
-        field: _tmp.message
-        field_split: " "
-        value_split: "="
-        ignore_failure: true
+          tag: kv_split_rule_fields
+          field: _tmp.message
+          field_split: " "
+          value_split: "="
+          ignore_failure: true
 
     - date:
           tag: date__tmp_timestamp8601
@@ -423,6 +423,22 @@ processors:
           ignore_missing: true
           ignore_failure: true
           override: false
+    - rename:
+          tag: rename_user_id
+          field: UID
+          target_field: server.user.id
+          if: ctx.UID != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
+          tag: rename_user_group_id
+          field: GID
+          target_field: server.user.group.id
+          if: ctx.GID != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
     - remove:
           tag: remove
           field:
@@ -456,8 +472,8 @@ on_failure:
 
     # - rename:
     #       tag: rename_
-    #       field: 
-    #       target_field: 
+    #       field:
+    #       target_field:
     #       if: ctx.cef?.extensions?. != null
     #       ignore_missing: true
     #       ignore_failure: true

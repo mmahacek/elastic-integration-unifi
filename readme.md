@@ -19,3 +19,17 @@ Once the integration has been uploaded, you can add it to Agent policies.
 To upgrade a newer version of the integration, repeat the above steps to upload the ZIP as a new integration.
 Once done, you can go to the agent policy and select "upgrade" to apply the new version to your policy.
 As pipelines and mapping are likely to change between versions, after installing upgrades and applying to the agent policy the data streams should manually be rolled over.
+
+## Configuring Unifi
+
+Unifi has two different places to configure SIEM system logging.
+
+- System logs
+  - In the `Integrations` section (Plug icon in bottom left of the Network UI), there is a `System Logging / SIEM` option.
+  - There are two main options, `Internally Stored` and `SIEM Server`.
+  - Select `SIEM Server` and select all categories you are interested in shipping logs for.
+  - Enter the `Server Address` of your Agent and the `Port` for your `unifi.system` dataset, defaults to `9040` in the integration.
+- Traffic logs
+  - When viewing traffic logs in the Network UI, there is a `Export to SIEM Server` option in the bottom left
+  - Set `Activity Logging (Syslog)` to `SIEM Server` and set the desired content categories.
+  - Specify the `Server Address` of your Agent and `Port` for the `unifi.unifi` dataset, defaults to `9041` in the integration.

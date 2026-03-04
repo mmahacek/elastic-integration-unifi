@@ -188,6 +188,10 @@
 - external: ecs
   name: server.user.name
 - external: ecs
+  name: server.user.id
+- external: ecs
+  name: server.user.group.id
+- external: ecs
   name: service.id
 - external: ecs
   name: source.address

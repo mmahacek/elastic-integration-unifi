@@ -1,7 +1,7 @@
 format_version: 3.5.4
 name: unifi
 title: "UniFi"
-version: 0.0.21
+version: 0.0.26
 source:
   license: "Elastic-2.0"
 description: "Collect logs from Unifi devices with Elastic Agent."
