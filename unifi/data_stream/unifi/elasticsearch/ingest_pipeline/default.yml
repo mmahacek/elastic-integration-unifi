@@ -439,6 +439,38 @@ processors:
           ignore_missing: true
           ignore_failure: true
           override: false
+    - convert:
+          field: source.address
+          type: ip
+          target_field: source.ip
+          ignore_missing: true
+          ignore_failure: true
+    - convert:
+          field: destination.address
+          type: ip
+          target_field: destination.ip
+          ignore_missing: true
+          ignore_failure: true
+    - grok:
+          field: message
+          ignore_missing: true
+          patterns:
+              - "PROTO=%{WORD:network.protocol}"
+    - grok:
+          field: message
+          patterns:
+              - "SPT=%{NUMBER:source.port} DPT=%{NUMBER:destination.port}"
+          ignore_missing: true
+    - convert:
+          field: source.port
+          type: long
+          ignore_missing: true
+          ignore_failure: true
+    - convert:
+          field: destination.port
+          type: long
+          ignore_missing: true
+          ignore_failure: true
     - remove:
           tag: remove
           field:
