@@ -454,13 +454,79 @@ processors:
     - grok:
           field: message
           ignore_missing: true
+          ignore_failure: true
           patterns:
-              - "PROTO=%{WORD:network.protocol}"
+              - '\[%{DATA:unifi.rule_id}\]\s+DESCR="%{DATA:unifi.rule}"'
     - grok:
           field: message
-          patterns:
-              - "SPT=%{NUMBER:source.port} DPT=%{NUMBER:destination.port}"
           ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - 'PROTO=%{WORD:network.protocol}'
+              - 'PROTO=%{NUMBER:network.iana_number}'
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - 'SPT=%{NUMBER:source.port} DPT=%{NUMBER:destination.port}'
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - 'IN=%{DATA:observer.ingress.interface.name}\s+OUT=%{DATA:observer.egress.interface.name}'
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - '\[%{DATA:unifi.rule_id}\]\s+DESCR="\[%{DATA:unifi.zone}\]%{WORD:network.action} %{GREEDYDATA:unifi.rule_name}"'
+              - '\[%{DATA:unifi.rule_id}\]\s+DESCR="%{DATA:unifi.rule_name}"'
+    - lowercase:
+          field: network.action
+          ignore_missing: true
+          ignore_failure: true
+    - script:
+          ignore_failure: true
+          source: |
+              if (ctx.network == null) {
+                ctx.network = [:];
+              }
+              if (ctx.unifi == null) {
+                ctx.unifi = [:];
+              }
+              if (ctx.network.protocol == null && ctx.network.iana_number != null) {
+                String p = ctx.network.iana_number.toString();
+                if (p == '1') {
+                  ctx.network.protocol = 'icmp';
+                } else if (p == '2') {
+                  ctx.network.protocol = 'igmp';
+                } else if (p == '6') {
+                  ctx.network.protocol = 'tcp';
+                } else if (p == '17') {
+                  ctx.network.protocol = 'udp';
+                } else if (p == '47') {
+                  ctx.network.protocol = 'gre';
+                } else if (p == '50') {
+                  ctx.network.protocol = 'esp';
+                } else if (p == '51') {
+                  ctx.network.protocol = 'ah';
+                }
+              }
+              if (ctx.network.action == null && ctx.unifi.rule_id != null) {
+                String rid = ctx.unifi.rule_id;
+                if (rid.contains("-A-")) {
+                  ctx.network.action = "allow";
+                } else if (rid.contains("-D-")) {
+                  ctx.network.action = "deny";
+                } else if (rid.contains("-R-")) {
+                  ctx.network.action = "reject";
+                }
+              }
+              if (ctx.unifi.rule_name == null && ctx.unifi.rule != null) {
+                ctx.unifi.rule_name = ctx.unifi.rule;
+              }
     - convert:
           field: source.port
           type: long
@@ -469,6 +535,29 @@ processors:
     - convert:
           field: destination.port
           type: long
+          ignore_missing: true
+          ignore_failure: true
+    - append:
+          field: related.ip
+          allow_duplicates: false
+          value:
+              - '{{source.ip}}'
+              - '{{destination.ip}}'
+          ignore_failure: true
+    - set:
+          field: observer.type
+          value: firewall
+          if: ctx.unifi != null && ctx.unifi.rule != null && ctx.unifi.rule != ''
+          ignore_failure: true
+    - set:
+          field: event.action
+          value: '{{network.action}}'
+          ignore_empty_value: true
+          ignore_failure: true
+    - remove:
+          field:
+              - source.address
+              - destination.address
           ignore_missing: true
           ignore_failure: true
     - remove:
