@@ -483,7 +483,7 @@ processors:
           ignore_missing: true
           ignore_failure: true
           patterns:
-              - 'IN=%{NOTSPACE:observer.ingress.interface.name}\s+OUT=%{NOTSPACE:observer.egress.interface.name}'
+              - 'IN=%{DATA:observer.ingress.interface.name}\s+OUT=%{NOTSPACE:observer.egress.interface.name}'
     - grok:
           field: message
           ignore_missing: true
@@ -513,6 +513,9 @@ processors:
               }
               if (ctx.unifi == null) {
                 ctx.unifi = [:];
+              }
+              if (ctx.LEN instanceof List) {
+                ctx.LEN = ctx.LEN.get(0);
               }
               if (ctx.network.protocol == null && ctx.network.iana_number != null) {
                 String p = ctx.network.iana_number.toString();
@@ -629,6 +632,18 @@ processors:
           ignore_empty_value: true
           ignore_failure: true
     - remove:
+          tag: remove_empty_ingress_interface
+          field: observer.ingress.interface.name
+          if: ctx.observer?.ingress?.interface?.name == ''
+          ignore_missing: true
+          ignore_failure: true
+    - remove:
+          tag: remove_empty_egress_interface
+          field: observer.egress.interface.name
+          if: ctx.observer?.egress?.interface?.name == ''
+          ignore_missing: true
+          ignore_failure: true
+    - remove:
           tag: remove_raw_kv_fields
           field:
               - PROTO
@@ -643,6 +658,10 @@ processors:
               - WINDOW
               - URGP
               - MARK
+              - TC
+              - HOPLIMIT
+              - FLOWLBL
+              - OUT
           ignore_missing: true
           ignore_failure: true
     - remove:
