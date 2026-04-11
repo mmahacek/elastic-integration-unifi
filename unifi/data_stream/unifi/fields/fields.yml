@@ -1,6 +1,18 @@
 - name: unifi
   type: group
   fields:
+    - name: rule
+      type: keyword
+      description: Full firewall rule description from DESCR field.
+    - name: rule_id
+      type: keyword
+      description: Firewall rule ID (e.g. LAN_LAN-A-10009).
+    - name: rule_name
+      type: keyword
+      description: Human-readable firewall rule name.
+    - name: zone
+      type: keyword
+      description: Zone extracted from firewall rule description.
     - name: event
       type: group
       fields:

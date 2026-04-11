@@ -120,6 +120,14 @@ processors:
           ignore_failure: true
           override: false
     - rename:
+          tag: rename_egress_interface_name
+          field: OUT
+          target_field: observer.egress.interface.name
+          if: ctx.OUT != null
+          ignore_missing: true
+          ignore_failure: true
+          override: false
+    - rename:
           tag: rename_cef_extensions_destinationAddress_to_destination_address_2a6c9211
           field: cef.extensions.destinationAddress
           target_field: destination.address
@@ -439,6 +447,229 @@ processors:
           ignore_missing: true
           ignore_failure: true
           override: false
+    - convert:
+          field: source.address
+          type: ip
+          target_field: source.ip
+          ignore_missing: true
+          ignore_failure: true
+    - convert:
+          field: destination.address
+          type: ip
+          target_field: destination.ip
+          ignore_missing: true
+          ignore_failure: true
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - '\[%{DATA:unifi.rule_id}\]\s+DESCR="%{DATA:unifi.rule}"'
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - 'PROTO=%{WORD:network.protocol}'
+              - 'PROTO=%{NUMBER:network.iana_number}'
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - 'SPT=%{NUMBER:source.port} DPT=%{NUMBER:destination.port}'
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - 'IN=%{DATA:observer.ingress.interface.name}\s+OUT=%{NOTSPACE:observer.egress.interface.name}'
+    - grok:
+          field: message
+          ignore_missing: true
+          ignore_failure: true
+          patterns:
+              - '\[%{DATA:unifi.rule_id}\]\s+DESCR="\[%{DATA:unifi.zone}\]%{WORD:network.action} %{GREEDYDATA:unifi.rule_name}"'
+              - '\[%{DATA:unifi.rule_id}\]\s+DESCR="%{DATA:unifi.rule_name}"'
+    - lowercase:
+          field: network.action
+          ignore_missing: true
+          ignore_failure: true
+    - lowercase:
+          field: network.protocol
+          ignore_missing: true
+          ignore_failure: true
+    - set:
+          tag: set_network_transport
+          field: network.transport
+          copy_from: network.protocol
+          ignore_empty_value: true
+          ignore_failure: true
+    - script:
+          ignore_failure: true
+          source: |
+              if (ctx.network == null) {
+                ctx.network = [:];
+              }
+              if (ctx.unifi == null) {
+                ctx.unifi = [:];
+              }
+              if (ctx.LEN instanceof List) {
+                ctx.LEN = ctx.LEN.get(0);
+              }
+              if (ctx.network.protocol == null && ctx.network.iana_number != null) {
+                String p = ctx.network.iana_number.toString();
+                String proto = null;
+                if (p == '1') {
+                  proto = 'icmp';
+                } else if (p == '2') {
+                  proto = 'igmp';
+                } else if (p == '6') {
+                  proto = 'tcp';
+                } else if (p == '17') {
+                  proto = 'udp';
+                } else if (p == '47') {
+                  proto = 'gre';
+                } else if (p == '50') {
+                  proto = 'esp';
+                } else if (p == '51') {
+                  proto = 'ah';
+                }
+                if (proto != null) {
+                  ctx.network.protocol = proto;
+                  if (ctx.network.transport == null) {
+                    ctx.network.transport = proto;
+                  }
+                }
+              }
+              if (ctx.network.action == null && ctx.unifi.rule_id != null) {
+                String rid = ctx.unifi.rule_id;
+                if (rid.contains("-A-")) {
+                  ctx.network.action = "allow";
+                } else if (rid.contains("-D-")) {
+                  ctx.network.action = "deny";
+                } else if (rid.contains("-R-")) {
+                  ctx.network.action = "reject";
+                }
+              }
+              if (ctx.unifi.rule_name == null && ctx.unifi.rule != null) {
+                ctx.unifi.rule_name = ctx.unifi.rule;
+              }
+    - convert:
+          field: source.port
+          type: long
+          ignore_missing: true
+          ignore_failure: true
+    - convert:
+          field: destination.port
+          type: long
+          ignore_missing: true
+          ignore_failure: true
+    - convert:
+          tag: convert_len_to_network_bytes
+          field: LEN
+          type: long
+          target_field: network.bytes
+          ignore_missing: true
+          ignore_failure: true
+    - set:
+          tag: set_rule_id
+          field: rule.id
+          copy_from: unifi.rule_id
+          ignore_empty_value: true
+          ignore_failure: true
+    - set:
+          tag: set_rule_name
+          field: rule.name
+          copy_from: unifi.rule_name
+          ignore_empty_value: true
+          ignore_failure: true
+    - set:
+          tag: set_event_kind
+          field: event.kind
+          value: event
+          if: ctx.unifi?.rule != null && ctx.unifi.rule != ''
+          ignore_failure: true
+    - append:
+          tag: append_event_category_network
+          field: event.category
+          value: network
+          allow_duplicates: false
+          if: ctx.unifi?.rule != null && ctx.unifi.rule != ''
+    - append:
+          tag: append_event_type_connection
+          field: event.type
+          value: connection
+          allow_duplicates: false
+          if: ctx.unifi?.rule != null && ctx.unifi.rule != ''
+    - append:
+          tag: append_event_type_allowed
+          field: event.type
+          value: allowed
+          allow_duplicates: false
+          if: ctx.event?.action == 'allow'
+    - append:
+          tag: append_event_type_denied
+          field: event.type
+          value: denied
+          allow_duplicates: false
+          if: ctx.event?.action == 'deny' || ctx.event?.action == 'reject'
+    - append:
+          field: related.ip
+          allow_duplicates: false
+          value:
+              - '{{source.ip}}'
+              - '{{destination.ip}}'
+          ignore_failure: true
+    - set:
+          field: observer.type
+          value: firewall
+          if: ctx.unifi != null && ctx.unifi.rule != null && ctx.unifi.rule != ''
+          ignore_failure: true
+    - set:
+          field: event.action
+          value: '{{network.action}}'
+          ignore_empty_value: true
+          ignore_failure: true
+    - remove:
+          tag: remove_empty_ingress_interface
+          field: observer.ingress.interface.name
+          if: ctx.observer?.ingress?.interface?.name == ''
+          ignore_missing: true
+          ignore_failure: true
+    - remove:
+          tag: remove_empty_egress_interface
+          field: observer.egress.interface.name
+          if: ctx.observer?.egress?.interface?.name == ''
+          ignore_missing: true
+          ignore_failure: true
+    - remove:
+          tag: remove_raw_kv_fields
+          field:
+              - PROTO
+              - LEN
+              - ID
+              - MAC
+              - TOS
+              - PREC
+              - TTL
+              - SEQ
+              - ACK
+              - WINDOW
+              - URGP
+              - MARK
+              - TC
+              - HOPLIMIT
+              - FLOWLBL
+              - OUT
+          ignore_missing: true
+          ignore_failure: true
+    - remove:
+          field:
+              - source.address
+              - destination.address
+          ignore_missing: true
+          ignore_failure: true
     - remove:
           tag: remove
           field:
